@@ -1,37 +1,18 @@
 #!/bin/bash
 set -e -x
 #Debian MISP install
-apt-get update && apt-get -upgrade -y
+apt-get update && apt-get upgrade -y
 
 # Install useful utils
-apt-get install -y iptables-persistent ipset rsync curl sudo rng-tools
+apt-get install -y rsync curl sudo rng-tools
 #apt-get install -y munin munin-node
 
 # Install the MISP dependencies:
 apt-get install -y gcc zip php-pear git redis-server make \
-libxml2-dev libxslt1-dev zlib1g-dev php5-dev libapache2-mod-php5 php5-mysql
-##UNSURE if needed
-#php5-curl
+libxml2-dev libxslt1-dev zlib1g-dev php5-dev libapache2-mod-php5 php5-mysql php5-curl
 
 pear install Crypt_GPG
 pear install Net_GeoIP
-
-#Lets Block all Outbound SMTP in case you aren't able to correctly set up your mail server!
-# And Risk get your IP BANNED!!
-iptables -t filter -N OUTBOUND_SMTP
-iptables -t filter -A OUTBOUND_SMTP -o lo -m comment --comment "[ACCEPT Loopback OUTBOUND_SMTP]: " -j ACCEPT
-iptables -t filter -A OUTBOUND_SMTP -m limit --limit 7/m --limit-burst 10 -j LOG --log-prefix "[OUTBOUND SMTP Packets]: "
-iptables -t filter -A OUTBOUND_SMTP -m comment --comment "[DROP OUTBOUND_SMTP]: " -j DROP
-iptables -t filter -I OUTPUT -m conntrack --ctstate NEW,ESTABLISHED,UNTRACKED -p tcp --dports 25,465,587 -j OUTBOUND_SMTP
-#
-iptables -t filter -N INBOUND_MAIL
-iptables -t filter -A INBOUND_MAIL -i lo -m comment --comment "[ACCEPT Loopback INBOUND_MAIL]: " -j ACCEPT
-iptables -t filter -A INBOUND_MAIL -m limit --limit 7/m --limit-burst 10 -j LOG --log-prefix "[INBOUND MAIL Packets]: "
-iptables -t filter -A INBOUND_MAIL -m comment --comment "[DROP INBOUND_MAIL]: " -j DROP
-iptables -t filter -I INPUT -m conntrack --ctstate NEW,ESTABLISHED,UNTRACKED -p tcp --dports 110,143,993,995 -j INBOUND_MAIL
-#
-iptables-save > /etc/iptables/rules.v4
-iptables-restore < /etc/iptables/rules.v4
 
 #Variables you can edit
 MISP="MISP"
@@ -66,6 +47,7 @@ MISPDBPASS="${MYSQLPASS}"
 
 # Obtain MISP Repo via git
 git clone ${MISPREPO} ${MISPDIRLOC}
+git checkout 2.4-beta
 
 # Fix Git PERMS
 cd ${MISPDIRLOC} && git config core.filemode false && cd -
