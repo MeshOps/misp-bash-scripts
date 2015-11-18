@@ -67,7 +67,7 @@ echo "Acquire::http::Proxy \"${APTPROXY}\";" > /etc/apt/apt.conf
 apt-get update && apt-get upgrade -y
 
 # Install the MISP dependencies:
-apt-get install -y gcc zip php-pear git redis-server make \
+apt-get install -y gcc zip php-pear git redis-server make openssl apache2
 libxml2-dev libxslt1-dev zlib1g-dev php5-dev libapache2-mod-php5 php5-mysql
 ##UNSURE if needed
 #php5-curl
@@ -173,7 +173,7 @@ mysql --host=${MISPDBHOST} --user=root --password=${MYSQL_ROOT_PASS} << CREATEDB
 
 CREATE USER '$MYSQL_USER'@'$MISPDBHOST' IDENTIFIED BY 'MYSQL_USER_PASS';
 CREATE DATABASE IF NOT EXISTS '$MYSQL_USER_DB';
-GRANT ALL PRIVILEGES ON '$MYSQL_USER_DB' . * TO '$MYSQL_USER'@'$MISPDBHOST';
+GRANT ALL PRIVILEGES ON '$MYSQL_USER_DB'.* TO '$MYSQL_USER'@'$MISPDBHOST';
 FLUSH PRIVILEGES;
 
 CREATEDB
