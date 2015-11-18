@@ -1,12 +1,32 @@
 #!/bin/bash
+set -e -x
+
+USAGE="Usage: $(basename $0) [-hv] args"
+#Check if user is root
+[ $(id -u) -ne 0 ] && {
+  echo "This program must be run by the root user!"
+  }
+#Check if Debian is the Linux Distro being used
+if [ ! -f /etc/debian_version ];
+  then
+    echo "Unsupported Linux Distro! ....Exiting";
+    exit 1;
+fi
+
+# Install useful utils
+apt-get install -y apg rsync curl sudo rng-tools openssh-server
+#apt-get install -y munin munin-node
 
 #Variables you can edit
+# Login credentials information
+CREDSFILE="/root/.credentials.txt"
+
 MISP="MISP"
 MISPDIRNAME="${MISP}"
 MISPDIRLOC="/var/www/${MISPDIRNAME}"
 MISPREPO="https://github.com/MISP/MISP.git"
-MISPVERSION"2.4-beta"
-MISPDBNET="127.0.0.1"
+MISPVERSION="2.4-beta"
+MISPDBHOST="localhost"
 
 # CYBOX info
 CYBOX="python-cybox"
@@ -24,18 +44,27 @@ STIXREPO="https://github.com/STIXProject/python-stix.git"
 COMPOSERURI="https://getcomposer.org/installer"
 
 #MYSQL DB info
-MYSQLPASS="misp"
-MISPDBUSER="misp"
-MISPDB="misp"
-MISPDBPASS="${MYSQLPASS}"
+#MYSQLPASS="misp"
+#MISPDBUSER="misp"
+#MISPDB="misp"
+#MISPDBPASS="${MYSQLPASS}"
 
-set -e -x
+#MySQL Variables
+MYSQL_VER="mysql-server-5.5"
+MYSQL_ROOT_PASS=$(apg -q -a 1 -n 1 -m 15 -x 15 -M NCL)
+MYSQL_USER="misp"
+MYSQL_USER_DB="misp"
+MYSQL_USER_PASS=$(apg -q -a 1 -n 1 -m 15 -x 15 -M NCL)
+
+# Set Apt-Cacher-NG Proxy
+APTPROXY="http://192.168.1.91:3142/"
+
+echo -e "[+] Configuring APT repositories...\n"
+# Enabling APT-CACHER-NG PROXY
+echo "Acquire::http::Proxy \"${APTPROXY}\";" > /etc/apt/apt.conf
+
 #Debian MISP install
 apt-get update && apt-get upgrade -y
-
-# Install useful utils
-apt-get install -y rsync curl sudo rng-tools
-#apt-get install -y munin munin-node
 
 # Install the MISP dependencies:
 apt-get install -y gcc zip php-pear git redis-server make \
@@ -48,7 +77,7 @@ pear install Net_GeoIP
 
 # Obtain MISP Repo via git
 git clone ${MISPREPO} ${MISPDIRLOC}
-git checkout ${MISPVERSION}
+#git checkout ${MISPVERSION}
 
 # Fix Git PERMS
 cd ${MISPDIRLOC} && git config core.filemode false && cd -
@@ -90,10 +119,10 @@ apt-get install -y php5-redis
 apachectl restart
 
 # To use the scheduler worker for scheduled tasks, do the following:
-cp -fva /var/www/MISP/INSTALL/setup/config.php /var/www/MISP/app/Plugin/CakeResque/Config/config.php
+cp -fva ${MISPDIRLOC}/INSTALL/setup/config.php ${MISPDIRLOC}/app/Plugin/CakeResque/Config/config.php
 
 #5/ Set the permissions
-----------------------
+#----------------------
 
 # Check if the permissions are set correctly using the following commands as root:
 chown -R www-data:www-data /var/www/MISP
@@ -109,26 +138,56 @@ find /var/www/MISP/app/{tmp,files} -type d -exec chmod 2770 {} \+
 find /var/www/MISP/app/{tmp,files} -type f -exec chmod 660 {} \+
 find /var/www/MISP/app/Console -type f -exec chmod 770 {} \+
 
+################################
 ## CREATE DB ETC
-EXPECTED_ARGS=3
-E_BADARGS=65
-MYSQL=`which mysql`
-  
-Q1="CREATE DATABASE IF NOT EXISTS $1;"
-Q2="GRANT USAGE ON *.* TO $2@localhost IDENTIFIED BY '$3';"
-Q3="GRANT ALL PRIVILEGES ON $1.* TO $2@localhost;"
-Q4="FLUSH PRIVILEGES;"
-SQL="${Q1}${Q2}${Q3}${Q4}"
-  
-if [ $# -ne $EXPECTED_ARGS ]
-then
-  echo "Usage: $0 misp misp misp"
-  exit $E_BADARGS
-fi
-  
-$MYSQL -umisp -pmisp -e "$SQL"
+#EXPECTED_ARGS=3
+#E_BADARGS=65
+#MYSQL=`which mysql`
+#
+#Q1="CREATE DATABASE IF NOT EXISTS $1;"
+#Q2="GRANT USAGE ON *.* TO $2@localhost IDENTIFIED BY '$3';"
+#Q3="GRANT ALL PRIVILEGES ON $1.* TO $2@localhost;"
+#Q4="FLUSH PRIVILEGES;"
+#SQL="${Q1}${Q2}${Q3}${Q4}"
+#
+#if [ $# -ne $EXPECTED_ARGS ]
+#then
+#  echo "Usage: $0 misp misp misp"
+#  exit $E_BADARGS
+#fi
+#
+#$MYSQL -umisp -pmisp -e "$SQL"
+#
+#mysql -u misp -p${MISPDBPASS} misp < ${MISPDIRLOC}/INSTALL/MYSQL.sql
+#################################
 
-mysql -u misp -p${MISPDBPASS} misp < ${MISPDIRLOC}/INSTALL/MYSQL.sql
+export DEBIAN_FRONTEND=noninteractive
+#Setup debconf for mysql-server
+echo "${MYSQL_VER} mysql-server/root_password_again password ${MYSQL_ROOT_PASS}" | debconf-set-selections
+echo "${MYSQL_VER} mysql-server/root_password password ${MYSQL_ROOT_PASS}" | debconf-set-selections
+
+# Install mysql
+apt-get install ${MYSQL_VER} -y
+
+mysql --host=${MISPDBHOST} --user=root --password=${MYSQL_ROOT_PASS} << CREATEDB
+
+CREATE USER '$MYSQL_USER'@'$MISPDBHOST' IDENTIFIED BY 'MYSQL_USER_PASS';
+CREATE DATABASE IF NOT EXISTS '$MYSQL_USER_DB';
+GRANT ALL PRIVILEGES ON '$MYSQL_USER_DB' . * TO '$MYSQL_USER'@'$MISPDBHOST';
+FLUSH PRIVILEGES;
+
+CREATEDB
+
+mysql -u ${MYSQL_USER} -p${MYSQL_USER_PASS} ${MYSQL_USER_DB} < ${MISPDIRLOC}/INSTALL/MYSQL.sql
+
+
+#Create and install a selfsigned certificate for Nginx
+echo -e "[+] Creating a self signed SSL certificate for Nginx...\n"
+echo -e "GB\nUnited Kingdom\nLondon\nMe5h Ltd.\
+\nIT\nMe5h\nssl@me5h.com\n" | \
+openssl req -x509 -nodes -days 365 -new -newkey rsa:2048 -keyout /etc/ssl/private/nginx.key -out /etc/ssl/certs/nginx.pem
+chmod 600 /etc/ssl/private/nginx.key
+chmod 644 /etc/ssl/certs/nginx.pem
 
 cp ${MISPDIRLOC}/INSTALL/apache.misp /etc/apache2/sites-available/misp.conf
 
@@ -137,8 +196,8 @@ a2ensite misp
 a2enmod rewrite
 apachectl restart
 
-8/ MISP configuration
----------------------
+#8/ MISP configuration
+#---------------------
 # There are 4 sample configuration files in /var/www/MISP/app/Config that need to be copied
 cd ${MISPDIRLOC}/app/Config
 cp -a bootstrap.default.php bootstrap.php
@@ -148,8 +207,8 @@ cp -a config.default.php config.php
 cd -
 
 
-8/ MISP configuration
----------------------
+#8/ MISP configuration
+#---------------------
 # There are 4 sample configuration files in /var/www/MISP/app/Config that need to be copied
 cd /var/www/MISP/app/Config
 cp -va bootstrap.default.php bootstrap.php
@@ -255,3 +314,26 @@ find ${MISPDIRLOC}/app/Config -type f -exec chmod 2640 {} \+
 ##  ),
 #
 ######
+
+#Send all necessary credential to a text file located whereever you
+#specified in CREDSFILE="/path/to/credentials/file"
+cat <<LEMP-creds > $CREDSFILE
+#Operating System:              Debian $OS_VER
+MySQL installed version:       $MYSQL_VER
+MySQL root password:           $MYSQL_ROOT_PASS
+MySQL user:                    $MYSQL_USER
+MySQL database:                $MYSQL_USER_DB
+MySQL user password:           $MYSQL_USER_PASS
+
+LEMP-creds
+
+chmod 600 ${CREDSFILE}
+echo
+echo -e "[+] Credentials file located at "${CREDSFILE}""
+echo -e "[+] PLEASE DELETE FILE MANUALLY WHEN FINISHED!\n"
+
+#Delete history of commands executed
+
+echo -e "[+] Deleting history Bash history file..."
+cat /dev/null > /root/.bash_history
+history -c
