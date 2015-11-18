@@ -1,26 +1,11 @@
 #!/bin/bash
-set -e -x
-#Debian MISP install
-apt-get update && apt-get upgrade -y
-
-# Install useful utils
-apt-get install -y rsync curl sudo rng-tools
-#apt-get install -y munin munin-node
-
-# Install the MISP dependencies:
-apt-get install -y gcc zip php-pear git redis-server make \
-libxml2-dev libxslt1-dev zlib1g-dev php5-dev libapache2-mod-php5 php5-mysql php5-curl
-
-pear install Crypt_GPG
-pear install Net_GeoIP
 
 #Variables you can edit
 MISP="MISP"
 MISPDIRNAME="${MISP}"
 MISPDIRLOC="/var/www/${MISPDIRNAME}"
 MISPREPO="https://github.com/MISP/MISP.git"
-#MISPDBNET="%"
-#MISPDBNET="192.168.1.%"
+MISPVERSION"2.4-beta"
 MISPDBNET="127.0.0.1"
 
 # CYBOX info
@@ -39,15 +24,31 @@ STIXREPO="https://github.com/STIXProject/python-stix.git"
 COMPOSERURI="https://getcomposer.org/installer"
 
 #MYSQL DB info
-MYSQLPASS="MISPDBPassword"
+MYSQLPASS="misp"
 MISPDBUSER="misp"
 MISPDB="misp"
 MISPDBPASS="${MYSQLPASS}"
 
+set -e -x
+#Debian MISP install
+apt-get update && apt-get upgrade -y
+
+# Install useful utils
+apt-get install -y rsync curl sudo rng-tools
+#apt-get install -y munin munin-node
+
+# Install the MISP dependencies:
+apt-get install -y gcc zip php-pear git redis-server make \
+libxml2-dev libxslt1-dev zlib1g-dev php5-dev libapache2-mod-php5 php5-mysql
+##UNSURE if needed
+#php5-curl
+
+pear install Crypt_GPG
+pear install Net_GeoIP
 
 # Obtain MISP Repo via git
 git clone ${MISPREPO} ${MISPDIRLOC}
-git checkout 2.4-beta
+git checkout ${MISPVERSION}
 
 # Fix Git PERMS
 cd ${MISPDIRLOC} && git config core.filemode false && cd -
@@ -109,11 +110,23 @@ find /var/www/MISP/app/{tmp,files} -type f -exec chmod 660 {} \+
 find /var/www/MISP/app/Console -type f -exec chmod 770 {} \+
 
 ## CREATE DB ETC
-#
-#
-#
-#
-######
+EXPECTED_ARGS=3
+E_BADARGS=65
+MYSQL=`which mysql`
+  
+Q1="CREATE DATABASE IF NOT EXISTS $1;"
+Q2="GRANT USAGE ON *.* TO $2@localhost IDENTIFIED BY '$3';"
+Q3="GRANT ALL PRIVILEGES ON $1.* TO $2@localhost;"
+Q4="FLUSH PRIVILEGES;"
+SQL="${Q1}${Q2}${Q3}${Q4}"
+  
+if [ $# -ne $EXPECTED_ARGS ]
+then
+  echo "Usage: $0 misp misp misp"
+  exit $E_BADARGS
+fi
+  
+$MYSQL -umisp -pmisp -e "$SQL"
 
 mysql -u misp -p${MISPDBPASS} misp < ${MISPDIRLOC}/INSTALL/MYSQL.sql
 
