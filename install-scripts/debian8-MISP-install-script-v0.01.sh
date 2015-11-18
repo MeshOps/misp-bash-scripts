@@ -58,7 +58,6 @@ MYSQL_USER_PASS=$(apg -q -a 1 -n 1 -m 15 -x 15 -M NCL)
 
 # Set Apt-Cacher-NG Proxy
 APTPROXY="http://192.168.1.91:3142/"
-
 echo -e "[+] Configuring APT repositories...\n"
 # Enabling APT-CACHER-NG PROXY
 echo "Acquire::http::Proxy \"${APTPROXY}\";" > /etc/apt/apt.conf
@@ -67,10 +66,9 @@ echo "Acquire::http::Proxy \"${APTPROXY}\";" > /etc/apt/apt.conf
 apt-get update && apt-get upgrade -y
 
 # Install the MISP dependencies:
-apt-get install -y gcc zip php-pear git redis-server make openssl apache2
-libxml2-dev libxslt1-dev zlib1g-dev php5-dev libapache2-mod-php5 php5-mysql
-##UNSURE if needed
-#php5-curl
+apt-get install -y gcc zip php-pear git redis-server make openssl apache2 \
+libxml2-dev libxslt1-dev zlib1g-dev \
+php5-dev libapache2-mod-php5 php5-mysql php5-curl
 
 pear install Crypt_GPG
 pear install Net_GeoIP
